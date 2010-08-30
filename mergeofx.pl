@@ -1,26 +1,26 @@
 #!/usr/bin/perl
+use strict;
+use warnings;
+use v5.10;
+use autodie qw{ :all };
+use utf8;
 
 use Carp;
 use Clone 'clone';
+use Data::Alias;
 use File::Path qw(make_path);
 use File::Spec::Functions qw(catfile);
 use File::Util qw(can_write existent);
+use Getopt::Euclid;
 use IO::File;
-use Memoize;
-use Toolkit qw(euclid);
-{
-    # These apparently have to be in this order. They're both source
-    # filters, so you can't really complain.
-    use Smart::Comments '####';
-    use Yada::Yada::Yada;
-}
-use XML::Compare;
-use XML::Twig;
-use XML::Twig::XPath;
 use Lingua::EN::Titlecase;
+use Smart::Comments '####';
 use Sort::Maker qw(make_sorter sorter_source);
 use Try::Tiny;
-use Scalar::Util qw(blessed);
+use XML::Compare;
+use XML::Twig::XPath;
+use List::AllUtils qw( all first first_index last_index uniq );
+use Scalar::Util 'blessed';
 sub prepare_directory {
     #### assert: all { defined } @_
 
@@ -31,7 +31,7 @@ sub prepare_directory {
 }
 
 sub list_dir {
-    ### assert: all { defined } @_
+    #### assert: all { defined } @_
 
     state $f = File::Util->new();
     $f->list_dir(@_);
@@ -46,23 +46,26 @@ sub prepare_output_directory {
     if (@existing_ofx_files) {
         if ($ARGV{'--abort'}) {
             # Abort option takes precedence
-            croak "Output directory already contains OFX files. Aborting.";
+            die "Output directory already contains OFX files. Aborting.\n";
         }
         elsif ($ARGV{'--update'} or $ARGV{'--overwrite'}) {
+            if ($ARGV{'--update'} and $ARGV{'--overwrite'}) {
+                die "You cannot specify both --update and --overwrite options.\n"
+            }
             # Do nothing. We'll handle individual files later.
         }
         else {
             # Abort by default
-            croak "Output directory already contains OFX files. Aborting.";
+            die "Output directory already contains OFX files. Aborting.\n";
         }
     }
     return 1;
 }
 
 # The non-XML-ish header at the top of OFX seems to cause most XML
-# processors to choke. This is everything before the "<OFX>" tag. So
-# separate out this header before processing the rest as XML, then
-# tack the header back on as we print it back out to a file.
+# processors to choke. This is everything before the opening "<OFX>"
+# tag. So separate out this header before processing the rest as XML,
+# then tack the header back on as we print it back out to a file.
 
 sub read_header_and_body {
     #### assert: all { defined } @_
@@ -111,8 +114,10 @@ sub get_xpath {
     }
 
     my $twig = $_[0];
-    my $xpath = $common_xpath->{$_[1]} || $_[1];
-    my $index = $_[2] || '';
+    my $xpath = $common_xpath->{$_[1]} || $_[1]
+        or croak "Invalid XPath: $_[1]";
+
+    #### assert: $twig->isa('XML::Twig');
 
     return $twig->findnodes($xpath);
 }
@@ -155,7 +160,7 @@ BEGIN {
         string => {
             code => sub {
                 my $xml = $_->{xml};
-                my $lbal = (get_xpath($xml,'ledger_balance'))[0]
+                my $lbal = (get_xpath($xml, 'ledger_balance'))[0]
                     or croak "OFX has no ledger balance: " . $_->{filename};
                 my $ldate = $lbal->first_child('DTASOF')
                     or croak "Ledger balance has no timestamp: " . $_->{filename}
@@ -176,7 +181,7 @@ BEGIN {
         # Sort optimized by GRT
         'GRT',
 
-
+        'closure',
         # Sort keys:
         # First use date posted (DTPOSTED)
         string => {
@@ -189,7 +194,7 @@ BEGIN {
                 ### $_->sprint
 
                 try {
-                    $_->first_child('DTPOSTED')->trimmed_text;
+                    return $_->first_child('DTPOSTED')->trimmed_text;
                 } catch {
                     croak "Transaction has no post date.";
                 }
@@ -200,9 +205,9 @@ BEGIN {
             closure => 1,
             code => sub {
                 try {
-                    $_->first_child('DTUSER')->trimmed_text;
+                    return $_->first_child('DTUSER')->trimmed_text;
                 } catch {
-                    q();
+                    return q();
                 }
             },
         },
@@ -211,7 +216,7 @@ BEGIN {
             closure => 1,
             code => sub {
                 try {
-                    $_->first_child('FITID')->trimmed_text;
+                    return $_->first_child('FITID')->trimmed_text;
                 } catch {
                     croak "Transaction has no FITID.";
                 }
@@ -234,13 +239,11 @@ sub is_twig_same {
 # account (i.e. their BANKACCTFROM or CCACCTFROM sections are
 # identical).
 sub is_account_same {
-    ### assert: all { defined } @_
-    my @xpath1 = get_xpath($_[0],'acctfrom');
-
-return is_twig_same(
+    #### assert: all { defined } @_
+    return is_twig_same(
         map {
             try {
-                (get_xpath($_,'acctfrom'))[0];
+                (get_xpath($_, 'acctfrom'))[0];
             } catch {
                 croak "OFX file has no account.\n$_"
             };
@@ -253,12 +256,13 @@ return is_twig_same(
 # lists, so that the items in each list all correspond to a single
 # account.
 sub group_ofx_by_account {
-    ### assert: all { defined } @_
+    #### assert: all { defined } @_
+    alias my @ungrouped = @_;
 
     # Shortcut: First ofx definitely gets its own group.
-    my @groups = @_ ? [ pop @_ ] : return;
-    while (@_) {
-        my $ofx = pop;
+    my @groups = @ungrouped ? [ pop @ungrouped ] : return;
+    while (@ungrouped) {
+        my $ofx = pop @ungrouped;
         my $group = first {
             is_account_same($ofx->{xml}, $_->[0]->{xml})
         } @groups;
@@ -270,12 +274,12 @@ sub group_ofx_by_account {
             # Otherwise, start a new group.
             push @groups, [ $ofx ];
         }
-      FINDGROUP: for my $ofx_group (@groups) {
-            if (is_account_same($ofx->{xml}, $ofx_group->[0]->{xml})) {
-                push @$ofx_group, $ofx;
-                last FINDGROUP;
-            }
-        }
+      # FINDGROUP: for my $ofx_group (@groups) {
+      #       if (is_account_same($ofx->{xml}, $ofx_group->[0]->{xml})) {
+      #           push @$ofx_group, $ofx;
+      #           last FINDGROUP;
+      #       }
+      #   }
     }
     return @groups;
 }
@@ -336,44 +340,66 @@ sub reconcile_ledgers {
         $ledger_bals[$_] - $ledger_bals[$_-1]
     } 1..$#ledger_bals;
 
-    # Now subtract each transaction amount from the appropriate ledger
-    # delta. After this, if all the deltas are zero, then we are
-    # reconciled. Note that only transactions that occurred between the
-    # first and last ledger dates can be reconciled. The others are
-    # discarded silently, since they have nothing to reconcile against.
-    my $period = -1;
-  TRANSACTION: for my $t (@transactions) {
+    #### assert: @ledger_bals == @ledger_dates
+    #### assert: @ledger_balance_deltas == @ledger_bals - 1
+
+
+    # Shortcut: filter out transactions with zero amount, since they
+    # have no effect.
+    @transactions = grep { abs($_->first_child('TRNAMT')->trimmed_text) > 0 } @transactions;
+
+    my @transaction_sums = (0) x (scalar(@ledger_dates) - 1);
+    my @transaction_ambiguous_sums = (0) x (scalar @ledger_dates);
+
+    for my $t (@transactions) {
         my $t_date = $t->first_child('DTPOSTED')->trimmed_text;
-      FIND_PERIOD: while ($t_date gt $ledger_dates[$period+1]) {
-            $period++;
-            if ($period >= $#ledger_dates) {
-                last TRANSACTION;
-            }
+        ### Tdate: $t_date
+        my $lower = last_index { $_ le $t_date } @ledger_dates;
+        ### Lower: $lower
+        next if $lower == -1;
+        my $upper = first_index { $_ ge $t_date } @ledger_dates;
+        ### Upper: $upper
+        last if $upper == -1;
+        ### In range...
+        my $t_amt = $t->first_child('TRNAMT')->trimmed_text;
+        ### Amt: $t_amt
+        if ($upper == $lower) {
+            ### Ambiguous....
+            $transaction_ambiguous_sums[$lower] += $t_amt;
         }
-        if ($period >= 0) {
-            my $t_amt = $t->first_child('TRNAMT')->trimmed_text;
-            ### $t_date
-            ### $t_amt
-            ### $period
-            $ledger_balance_deltas[$period] -= $t_amt;
+        else {
+            ### Not ambiguous...
+            $transaction_sums[$lower] += $t_amt;
         }
-
-
     }
+    #### assert: @transaction_ambiguous_sums == @transaction_sums + 1
+
+    # Now we have to try both possibilities:
+    # Option A: Each ambiguous day goes with the period after it
+    my @difference_a = map {
+        $transaction_sums[$_]
+            + $transaction_ambiguous_sums[$_]
+                - $ledger_balance_deltas[$_]
+    } 0..$#transaction_sums;
+    # Option B: Each ambiguous day goes with the period before it
+    my @difference_b = map {
+        $transaction_sums[$_]
+            + $transaction_ambiguous_sums[$_+1]
+                - $ledger_balance_deltas[$_]
+    } 0..$#transaction_sums;
+    # Either A or B must be all zeroes
 
 
     ### @ledger_bals
     ### @ledger_dates
-    ### @transaction_amts
-    ### @transaction_dates
     ### @ledger_balance_deltas
-
-    #### assert: @ledger_bals == @ledger_dates
-    #### assert: @ledger_balance_deltas == @ledger_bals - 1
 
     # Now check for non-zero deltas
     state $floating_point_fuzz = 0.0001;
-    return all { $_ < $floating_point_fuzz } @ledger_balance_deltas;
+    ### A: @difference_a
+    ### B: @difference_b
+    return ((all { abs($_) < $floating_point_fuzz } @difference_a)
+                or (all { abs($_) < $floating_point_fuzz } @difference_b));
 }
 
 sub merge_ofx {
@@ -390,8 +416,10 @@ sub merge_ofx {
     # Don't change the originals; sort by ledger date
     my @input_ofx = sort_ofx_by_ledger_date(@_);
 
+    ### Merging: map { gen_ofx_basename($_) } @input_ofx
+
     #### assert: @input_ofx == @_
-    local $_ = undef;
+    local $_;
 
     # Extract just the xml
     my @ofx_xml = map { $_->{xml} } @input_ofx;
@@ -400,7 +428,7 @@ sub merge_ofx {
 
     # Get all the transactions, without duplicates, sorted by date
     my @all_transactions =  map {
-        my $tlist = (get_xpath($_,'transaction_list'))[0];
+        my $tlist = (get_xpath($_, 'transaction_list'))[0];
         #### assert: $tlist->isa('XML::Twig::Elt')
         my @children = $tlist->children('STMTTRN');
         @children;
@@ -410,17 +438,17 @@ sub merge_ofx {
 
     # Get all the ledger balances, sorted by date
     my @ledger_balances = map {
-        (get_xpath($_,'ledger_balance'))[0];
+        (get_xpath($_, 'ledger_balance'))[0];
     } @ofx_xml;
 
     reconcile_ledgers(\@ledger_balances, \@transactions)
-        or croak "Ledger balances do not agree with transactions.";
+        or die "Ledger balances do not agree with transactions. Are you missing a statement?\n";
 
     # Copy most attributes from the latest one
     my $merged_ofx_xml = clone $ofx_xml[-1];
 
     # Merge <FI> blocks
-    my @fi_blocks = map { get_xpath($_,'fi') } @ofx_xml;
+    my @fi_blocks = map { get_xpath($_, 'fi') } @ofx_xml;
     if (@fi_blocks) {
         # Start with the latest <FI> block, and then fill in missing
         # desired fields from previous ones if possible.
@@ -438,15 +466,15 @@ sub merge_ofx {
 
         # Now remove the existing FI block from the merged xml and
         # replace it with the merged FI block
-        if (my $existing_fi = (get_xpath($merged_ofx_xml,'fi'))[0]) {
+        if (my $existing_fi = (get_xpath($merged_ofx_xml, 'fi'))[0]) {
             $existing_fi->cut;
         }
-        my $merged_fi_parent = (get_xpath($merged_ofx_xml,'fi_parent'))[0];
+        my $merged_fi_parent = (get_xpath($merged_ofx_xml, 'fi_parent'))[0];
         $merged_fi->paste(last_child => $merged_fi_parent);
     }
 
     # Generate merged transaction list
-    my $merged_tranlist = (get_xpath($merged_ofx_xml,'transaction_list'))[0];
+    my $merged_tranlist = (get_xpath($merged_ofx_xml, 'transaction_list'))[0];
 
     ### assert: $merged_tranlist->can('first_child')
     ### Class: ref $merged_tranlist
@@ -485,13 +513,15 @@ sub title_case {
 # Generate a filename for an ofx
 sub gen_ofx_basename {
     my $xml = $_[0]->{xml};
+    #### assert: $xml->isa('XML::Twig')
 
+    local $_;
     # Gather information
     my $bank = title_case(
         try {
-            (get_xpath($xml,'fi'))[0]->first_child('ORG')->trimmed_text
+            (get_xpath($xml, 'fi'))[0]->first_child('ORG')->trimmed_text
         } catch { try {
-            (get_xpath($xml,'acctfrom'))[0]->first_child('BANKID')->trimmed_text
+            (get_xpath($xml, 'acctfrom'))[0]->first_child('BANKID')->trimmed_text
         } catch { '' }}
     );
     # Any bank identifier that doesn't start with a letter should have
@@ -500,7 +530,7 @@ sub gen_ofx_basename {
         $bank = "Bank_" . $bank;
     }
 
-    my $acctfrom = (get_xpath($xml,'acctfrom'))[0];
+    my $acctfrom = (get_xpath($xml, 'acctfrom'))[0];
 
     my $acct = try {
         $acctfrom->first_child('ACCTID')->trimmed_text;
@@ -517,12 +547,15 @@ sub gen_ofx_basename {
         }
     });
 
+    my $date = substr((get_xpath($xml, 'ledger_balance'))[0]->first_child('DTASOF')->trimmed_text,0,8);
+
     # Generate the name
     my $full_name = q();
     if ($bank) {
         $full_name .= "$bank" . q(_);
     }
-    $full_name .= $type . q(_) . $acct;
+    $full_name .= "${type}_${acct}_As_of_${date}";
+
 
     $full_name =~ s/ /_/g;
 
@@ -544,7 +577,7 @@ sub save_ofx_in_directory {
 
 ### Begin script...
 
-$ARGV{'--files'} or croak "No input files were specified.";
+#$ARGV{'<ofxfiles>'} or croak "No input files were specified.";
 
 ### Preparing output directory...
 
@@ -552,29 +585,36 @@ prepare_output_directory();
 
 ### Reading input files...
 
-alias my @input_files = @{$ARGV{'--files'}};
+alias my @input_files = @{$ARGV{'<ofxfiles>'}};
+if (@input_files == 0 and ($ARGV{'--overwrite'} or not $ARGV{'--update'})) {
+    die "No input files were specified.\n"
+}
+
+my @existing_ofx_files = map { catfile($ARGV{'--output-directory'},$_) } list_dir($ARGV{'--output-directory'}, '--pattern=\.ofx$');
+
 if ($ARGV{'--update'}) {
     # In order to update existing files, we just add the existing
     # files to the input, and then overwrite.
-    my @existing_ofx_files = map { catfile($ARGV{'--output-directory'},$_) } list_dir($ARGV{'--output-directory'}, '--pattern=\.ofx$');
     push @input_files, @existing_ofx_files;
 }
 
+
+
 my @input_ofx = map {
-    alias my $filename = $_;
+    my $filename = $_;
     #### assert: $filename
     my $ofx = read_header_and_body(IO::File->new($filename, 'r') or croak "Could not open $filename");
     $ofx->{filename} = $filename;
     $ofx->{xml} = parse_ofx_text($ofx->{body});
 
-    ### assert: (get_xpath($ofx->{xml},'fi'))[0]->sprint
-    ### assert: (get_xpath($ofx->{xml},'transaction_list'))[0]->sprint
-    ### assert: (get_xpath($ofx->{xml},'acctfrom'))[0]->sprint
-    ### assert: (get_xpath($ofx->{xml},'ledger_balance'))[0]->sprint
+    ### assert: (get_xpath($ofx->{xml}, 'fi'))[0]->sprint
+    ### assert: (get_xpath($ofx->{xml}, 'transaction_list'))[0]->sprint
+    ### assert: (get_xpath($ofx->{xml}, 'acctfrom'))[0]->sprint
+    ### assert: (get_xpath($ofx->{xml}, 'ledger_balance'))[0]->sprint
 
     # List of hashes with keys = (header, body, xml)
     $ofx;
-} @input_files;
+} uniq(@input_files);
 
 ### Grouping by account...
 
@@ -585,6 +625,14 @@ my @ofx_groups = group_ofx_by_account(@input_ofx);
 my @merged_ofx = map { merge_ofx(@$_) } @ofx_groups;
 
 ### Saving output...
+
+# For updating, the file names may change, so unlink the old file
+# names. For overwrite, we're just blowing them away. For abort, we
+# won't ever get here. But just to make sure...
+#### assert: not $ARGV{'--abort'}
+if (@existing_ofx_files) {
+    unlink(@existing_ofx_files);
+}
 
 foreach my $ofx (@merged_ofx) {
     save_ofx_in_directory($ofx,$ARGV{'--output-directory'});
@@ -605,7 +653,7 @@ version 0.0.1
 
     mergeofx
 
-=head1 OPTIONS
+=head1 REQUIRED ARGUMENTS
 
 =over
 
@@ -613,6 +661,21 @@ version 0.0.1
 
 Specify the output directory for the merged OFX files. One file per
 account will be created (or updated) in this directory.
+
+=back
+
+=head1 OPTIONS
+
+=over
+
+=item <ofxfiles>
+
+The OFX files to merge. These can be files from multiple accounts.
+Each will only be merged with others of the same account.
+
+=for Euclid:
+    ofxfiles.type: readable
+    repeatable
 
 =item --update[-on-conflict]
 
@@ -626,16 +689,14 @@ to do. "Update" means that the new data should be merged into the
 existing files in that directory. This is useful for when you download
 new statements and need to merge them with your current data.
 "Overwrite" means that the old files should be deleted and replaced
-with the new data. By default, the program will abort, because this minimizes the chance of data loss.
+with the new data. By default, the program will abort, because this
+minimizes the chance of data loss.
 
-=item --files <ofxfiles>... | -f <ofxfiles>...
-
-The OFX files to merge. These can be files from multiple accounts.
-Each will only be merged with others of the same account. This must be
-last on the command line.
-
-=for Euclid:
-    ofxfiles.type: readable
+As a special case, you can use --update without any input files to
+simply re-process the existing ofx files in the output directory. This
+would only be useful if you manually edited them and wanted them to be
+automatically renamed according to your edits. But you shouldn't be
+doing that. Shame on you.
 
 =item --version
 
@@ -657,7 +718,7 @@ Ryan Thompson (rct@thompsonclan.org)
 
 This program skims a fraction of a cent off of each transaction that
 it processes, and deposits those fractions of cents into my bank
-account.
+account. Or maybe it's just floating-point errors. You'll never know.
 
 =head1 COPYRIGHT
 
