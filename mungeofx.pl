@@ -3,7 +3,6 @@
 use Toolkit qw(smart);
 use XML::LibXML;
 use IO::File;
-use Data::Traverse qw(traverse);
 use XML::Twig;
 use Capture::Tiny;
 
