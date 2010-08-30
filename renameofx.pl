@@ -190,8 +190,8 @@ foreach my $ofx (@input_ofx) {
         $outfile = catfile($dir, $outfile);
     }
 
-    #### Input file: $infile
-    #### Output file: $outfile
+    ### Input file: $infile
+    ### Output file: $outfile
 
     move($infile,$outfile)
         or die "Failed to move $infile to $outfile";
