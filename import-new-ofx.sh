@@ -15,7 +15,7 @@ shopt -s nullglob
 
 mkdir -p "$OFX_DIR"
 
-{ pushd "$OFX_DIR"
+{ cd "$OFX_DIR"
 
   mkdir -p "$NEW_DIR" "$OLD_DIR"
 
@@ -25,40 +25,38 @@ mkdir -p "$OFX_DIR"
   #tempfiles=""
 
   # Fix OFX files, move them from old to new, and rename them
-  { pushd "$NEW_DIR"
+  { cd "$NEW_DIR"
     if [ "`echo *.ofx *.qfx`" != "" ]; then
+      echo "Fixing..."
       for x in *.ofx *.qfx; do
         tempfile=`mktemp -p "../${OLD_DIR}" -t TEMPOFX.XXXXXXXXX`
-        #tempfiles="$tempfiles $tempfile"
-        echo "Fixing $x..."
         "$FIXOFX" < "$x" > "$tempfile" || { echo "fixofx failed on $x"; exit 1; }
       done
     else
-      echo "No new files. Exiting."
-      exit 0;
+      echo "No new files to import."
     fi
-    popd
+    cd ..
   }
-
-  #exit 0;
 
   # Munge and merge OFX files
-  { pushd "$OLD_DIR"
+  { cd "$OLD_DIR"
+    if [ "`echo TEMPOFX.*`" != "" ]; then
+      echo "Munging..."
+      "$MUNGEOFX" TEMPOFX.* || { echo "Munging failed"; exit 1; }
 
-    echo "Munging..."
-    "$MUNGEOFX" TEMPOFX.* || { echo "Munging failed"; exit 1; }
-
-    echo "Merging..."
+      echo "Merging..."
+    else
+      echo "Updating existing files..."
+    fi
     "$MERGEOFX" --output-directory "$OFX_DIR" --update TEMPOFX.* || { echo "Merge failed"; exit 1; }
 
-    echo "Renaming..."
-    "$RENAMEOFX" TEMPOFX.* || { echo "renameofx failed"; exit 1; }
-    trash ../"$NEW_DIR"/*.[oq]fx
-
-    popd
+    if [ "`echo TEMPOFX.*`" != "" ]; then
+      echo "Renaming..."
+      "$RENAMEOFX" TEMPOFX.* || { echo "renameofx failed"; exit 1; }
+      trash ../"$NEW_DIR"/*.[oq]fx
+    fi
+    cd ..
   }
-  rm -f "$OLD_DIR"/TEMPOFX.*
-  popd
 }
 
 echo "Done."
