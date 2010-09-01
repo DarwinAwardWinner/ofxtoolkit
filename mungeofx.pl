@@ -50,6 +50,7 @@ state $date_tags = [
         # Munge transactions
         twig_handlers   => {
             'OFX/BANKMSGSRSV1/STMTTRNRS/STMTRS/BANKTRANLIST/STMTTRN' => \&munge_transaction,
+            '/OFX/CREDITCARDMSGSRSV1/CCSTMTTRNRS/CCSTMTRS/BANKTRANLIST/STMTTRN' => \&munge_transaction,
             map { $_ => \&munge_date } @$date_tags,
         },
         pretty_print => 'indented',
