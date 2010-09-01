@@ -18,7 +18,7 @@ sub read_header_and_body {
     my @body;
 
     while (<$input>) {
-	if ( m/ \s* <OFX> \s* /xsm ) {
+	if ( m{ \s* <OFX> \s* }xsm ) {
             push @body, $_, <$input>;
             last;
 	}
