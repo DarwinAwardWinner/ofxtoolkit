@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-use Toolkit qw(smart);
+use Toolkit;# 'smart4';
 use XML::LibXML;
 use IO::File;
 use XML::Twig;
