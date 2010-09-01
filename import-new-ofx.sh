@@ -3,7 +3,6 @@
 OFX_DIR="$HOME/Documents/finance"
 NEW_DIR=".new"
 OLD_DIR=".old"
-
 # Programs
 # fixofx.py from wesabe
 FIXOFX="/home/ryan/src/wesabe/fixofx/fixofx.py"
