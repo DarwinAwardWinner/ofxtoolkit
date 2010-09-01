@@ -69,12 +69,29 @@ sub munge_transaction {
 
     if ($name and $memo) {
         if (starts_with($memo->text, $name->text)) {
-            # If name is a truncated version of memo, then delete name
-            # and replace it with memo.
-            $name->cut;
-            $memo->set_tag('NAME');
+            # If name is a truncated version of memo, then replace it
+            # with memo.
+            #### Completing name from memo...
+            $name->set_text($memo->text);
         }
     }
+    elsif ($name) {
+        #### Copy name to memo...
+        $memo = $name->copy;
+        $memo->set_tag('MEMO');
+        $memo->paste(after => $name);
+    }
+    elsif ($memo) {
+        #### Copy memo to name...
+        $name = $memo->copy;
+        $name->set_tag('NAME');
+        $name->paste(before => $memo);
+    }
+    else {
+        croak "Transaction has no name or memo. The offenting transaction was:\n"
+            . $transaction->sprint;
+    }
+    #### New transaction: $transaction->sprint
 }
 
 # Truncate dates to 8 digits: YYYYMMDD, because the stuff after that
