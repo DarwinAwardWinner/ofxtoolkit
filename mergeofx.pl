@@ -15,6 +15,7 @@ use Getopt::Euclid;
 use IO::File;
 use Lingua::EN::Titlecase;
 use Smart::Comments '####';
+#use Smart::Comments '###';
 use Sort::Maker qw(make_sorter sorter_source);
 use Try::Tiny;
 use XML::Compare;
@@ -137,7 +138,7 @@ sub parse_ofx_text {
     #### assert: get_xpath($twig, 'fi_parent')
 
     # This one is not mandatory
-    ### check: get_xpath($twig, 'fi')
+    # ## check: get_xpath($twig, 'fi')
 
     return $twig;
 }
@@ -170,7 +171,6 @@ BEGIN {
             },
         }
     ) or die "make_sorter: $@";
-    ### ledger sorter source: sorter_source(\&sort_ofx_by_ledger_date)
 
     make_sorter(
         name => 'sort_transactions_by_date',
@@ -223,7 +223,6 @@ BEGIN {
             },
         },
     ) or die "make_sorter: $@";
-    ### transaction sorter source: sorter_source(\&sort_transactions_by_date)
 }
 
 # Takes two twigs and returns true if they are semantically the same,
@@ -389,7 +388,8 @@ sub reconcile_ledgers {
     } 0..$#transaction_sums;
     # Either A or B must be all zeroes
 
-
+    ### @transaction_sums
+    ### @transaction_ambiguous_sums
     ### @ledger_bals
     ### @ledger_dates
     ### @ledger_balance_deltas
@@ -442,7 +442,7 @@ sub merge_ofx {
     } @ofx_xml;
 
     reconcile_ledgers(\@ledger_balances, \@transactions)
-        or die "Ledger balances do not agree with transactions. Are you missing a statement?\n";
+        or die "Ledger balances for account " . gen_ofx_basename($input_ofx[-1]) . " do not agree with transactions. Are you missing a statement?\n";
 
     # Copy most attributes from the latest one
     my $merged_ofx_xml = clone $ofx_xml[-1];
@@ -607,7 +607,7 @@ my @input_ofx = map {
     $ofx->{filename} = $filename;
     $ofx->{xml} = parse_ofx_text($ofx->{body});
 
-    ### assert: (get_xpath($ofx->{xml}, 'fi'))[0]->sprint
+    # ## check: (get_xpath($ofx->{xml}, 'fi'))[0]->sprint
     ### assert: (get_xpath($ofx->{xml}, 'transaction_list'))[0]->sprint
     ### assert: (get_xpath($ofx->{xml}, 'acctfrom'))[0]->sprint
     ### assert: (get_xpath($ofx->{xml}, 'ledger_balance'))[0]->sprint
