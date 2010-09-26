@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
-use Toolkit;# 'smart4';
+use Toolkit 'smartenv';
+#use Toolkit 'smart4';
 use XML::LibXML;
 use IO::File;
 use XML::Twig;
@@ -89,18 +90,21 @@ sub munge_transaction {
         }
     }
     elsif ($name) {
+        # Missing memo
         #### Copy name to memo...
         $memo = $name->copy;
         $memo->set_tag('MEMO');
         $memo->paste(after => $name);
     }
     elsif ($memo) {
+        # Missing name
         #### Copy memo to name...
         $name = $memo->copy;
         $name->set_tag('NAME');
         $name->paste(before => $memo);
     }
     else {
+        # Missing both. Not allowed.
         croak "Transaction has no name or memo. The offenting transaction was:\n"
             . $transaction->sprint;
     }
@@ -108,7 +112,7 @@ sub munge_transaction {
 }
 
 # Truncate dates to 8 digits: YYYYMMDD, because the stuff after that
-# is usually bullshit.
+# is usually invalid and evil.
 sub munge_date {
     my $date = $_;
     $date->set_text(substr($date->trimmed_text,0,8));
