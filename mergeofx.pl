@@ -20,7 +20,7 @@ use Try::Tiny;
 use XML::Compare;
 use XML::Twig::XPath;
 use List::AllUtils qw( all first first_index last_index uniq );
-use Scalar::Util 'blessed';
+
 sub prepare_directory {
     #### assert: all { defined } @_
 
