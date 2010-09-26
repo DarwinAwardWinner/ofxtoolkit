@@ -5,6 +5,7 @@ use XML::LibXML;
 use IO::File;
 use XML::Twig;
 use Capture::Tiny;
+use List::AllUtils qw( maxstr );
 
 # The non-XML-ish header at the top of OFX seems to cause most XML
 # processors to choke. This is everything before the "<OFX>" tag. So
@@ -36,23 +37,34 @@ sub read_header_and_body {
 sub munge_ofx_text {
     alias my $text = $_[0];
 
-state $date_tags = [
-    "DTACCTUP",
-    "DTASOF",
-    "DTEND",
-    "DTPOSTED",
-    "DTSERVER",
-    "DTSTART",
-    "DTUSER",
-];
+    state $date_tags = [
+        'DTACCTUP',
+        'DTASOF',
+        'DTEND',
+        'DTPOSTED',
+        'DTSERVER',
+        'DTSTART',
+        'DTUSER',
+    ];
+
+    state $stmtrs_tags = [
+        'STMTRS',
+        'CCSTMTRS',
+    ];
+
+    state $transaction_tags = [
+        'STMTTRN',
+    ];
+
+    # These handlers will munge specific elements
+    state $handlers = {
+        (map { $_ => \&munge_transaction } @$transaction_tags),
+        (map { $_ => \&munge_date } @$date_tags),
+        (map { $_ => \&munge_dtasof } @$stmtrs_tags),
+    };
 
     my $twig = XML::Twig->new(
-        # Munge transactions
-        twig_handlers   => {
-            'OFX/BANKMSGSRSV1/STMTTRNRS/STMTRS/BANKTRANLIST/STMTTRN' => \&munge_transaction,
-            '/OFX/CREDITCARDMSGSRSV1/CCSTMTTRNRS/CCSTMTRS/BANKTRANLIST/STMTTRN' => \&munge_transaction,
-            map { $_ => \&munge_date } @$date_tags,
-        },
+        twig_handlers => $handlers,
         pretty_print => 'indented',
     );
     $twig->parse($text);
@@ -101,6 +113,19 @@ sub munge_date {
     my $date = $_;
     $date->set_text(substr($date->trimmed_text,0,8));
 
+}
+
+# Change every DTASOF field to match the latest DTPOSTED of any
+# transaction, because the provided DTASOF field is usually a lie.
+sub munge_dtasof {
+    #### Munging DTASOF...
+    my $tranlist = $_[0];
+    my $latest_post_date = maxstr map { $_->trimmed_text } $tranlist->get_xpath('.//DTPOSTED');
+    #### Latest post date: $latest_post_date
+    my @as_of_date_nodes = $tranlist->get_xpath('.//DTASOF');
+    for my $node (@as_of_date_nodes) {
+        $node->set_text($latest_post_date);
+    }
 }
 
 sub starts_with {
