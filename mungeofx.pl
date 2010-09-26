@@ -137,13 +137,16 @@ sub starts_with {
     return substr($string, 0, length $start) eq $start;
 }
 
-for my $filename (@ARGV) {
-    my $input = IO::File->new($filename);
-    my $data = read_header_and_body($input);
-    $input->close;
-    my $body_text = join q(), @{$data->{body}};
-    my $munged_body_text = munge_ofx_text($body_text);
-    my $output = IO::File->new($filename, 'w');
-    $output->print(@{$data->{header}}, $munged_body_text);
-    $output->close;
+main: {
+    for my $filename (@ARGV)
+    {
+        my $input = IO::File->new($filename);
+        my $data = read_header_and_body($input);
+        $input->close;
+        my $body_text = join q(), @{$data->{body}};
+        my $munged_body_text = munge_ofx_text($body_text);
+        my $output = IO::File->new($filename, 'w');
+        $output->print(@{$data->{header}}, $munged_body_text);
+        $output->close;
+    }
 }
