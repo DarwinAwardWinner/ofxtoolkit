@@ -8,11 +8,24 @@ use XML::Twig;
 use Capture::Tiny;
 use List::AllUtils qw( maxstr );
 
+main: {
+    for my $filename (@ARGV)
+    {
+        my $input = IO::File->new($filename);
+        my $data = read_header_and_body($input);
+        $input->close;
+        my $body_text = join q(), @{$data->{body}};
+        my $munged_body_text = munge_ofx_text($body_text);
+        my $output = IO::File->new($filename, 'w');
+        $output->print(@{$data->{header}}, $munged_body_text);
+        $output->close;
+    }
+}
+
 # The non-XML-ish header at the top of OFX seems to cause most XML
 # processors to choke. This is everything before the "<OFX>" tag. So
 # separate out this header before processing the rest as XML, then
 # tack the header back on at the end.
-
 sub read_header_and_body {
     alias my $input = $_[0];
 
@@ -135,18 +148,4 @@ sub munge_dtasof {
 sub starts_with {
     alias my ($string, $start) = @_;
     return substr($string, 0, length $start) eq $start;
-}
-
-main: {
-    for my $filename (@ARGV)
-    {
-        my $input = IO::File->new($filename);
-        my $data = read_header_and_body($input);
-        $input->close;
-        my $body_text = join q(), @{$data->{body}};
-        my $munged_body_text = munge_ofx_text($body_text);
-        my $output = IO::File->new($filename, 'w');
-        $output->print(@{$data->{header}}, $munged_body_text);
-        $output->close;
-    }
 }
