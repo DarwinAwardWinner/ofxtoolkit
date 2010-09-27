@@ -61,7 +61,7 @@ sub munge_ofx_text {
     state $handlers = {
         (map { $_ => \&munge_transaction } @$transaction_tags),
         (map { $_ => \&munge_date } @$date_tags),
-        (map { $_ => \&munge_dtasof } @$stmtrs_tags),
+        # (map { $_ => \&munge_dtasof } @$stmtrs_tags),
     };
 
     my $twig = XML::Twig->new(
