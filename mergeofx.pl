@@ -14,13 +14,13 @@ use File::Util qw(can_write existent);
 use Getopt::Euclid;
 use IO::File;
 use Lingua::EN::Titlecase;
+use List::AllUtils qw( all first first_index last_index uniq );
 use Smart::Comments '####';
 #use Smart::Comments '###';
 use Sort::Maker qw(make_sorter sorter_source);
 use Try::Tiny;
 use XML::Compare;
 use XML::Twig::XPath;
-use List::AllUtils qw( all first first_index last_index uniq );
 
 sub prepare_directory {
     #### assert: all { defined } @_
