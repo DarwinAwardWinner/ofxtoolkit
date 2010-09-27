@@ -22,6 +22,77 @@ use Try::Tiny;
 use XML::Compare;
 use XML::Twig::XPath;
 
+main: {
+    ### Begin script...
+
+    #$ARGV{'<ofxfiles>'} or croak "No input files were specified.";
+
+    ### Preparing output directory...
+
+    prepare_output_directory();
+
+    ### Reading input files...
+
+    alias my @input_files = @{$ARGV{'<ofxfiles>'}};
+    if (@input_files == 0 and ($ARGV{'--overwrite'} or not $ARGV{'--update'}))
+    {
+        die "No input files were specified.\n"
+    }
+
+    my @existing_ofx_files = map { catfile($ARGV{'--output-directory'},$_) } list_dir($ARGV{'--output-directory'}, '--pattern=\.ofx$');
+
+    if ($ARGV{'--update'})
+    {
+        # In order to update existing files, we just add the existing
+        # files to the input, and then overwrite.
+        push @input_files, @existing_ofx_files;
+    }
+
+
+
+    my @input_ofx = map {
+        my $filename = $_;
+        #### assert: $filename
+        my $ofx = read_header_and_body(IO::File->new($filename, 'r') or croak "Could not open $filename");
+        $ofx->{filename} = $filename;
+        $ofx->{xml} = parse_ofx_text($ofx->{body});
+
+        # ## check: (get_xpath($ofx->{xml}, 'fi'))[0]->sprint
+        ### assert: (get_xpath($ofx->{xml}, 'transaction_list'))[0]->sprint
+        ### assert: (get_xpath($ofx->{xml}, 'acctfrom'))[0]->sprint
+        ### assert: (get_xpath($ofx->{xml}, 'ledger_balance'))[0]->sprint
+
+        # List of hashes with keys = (header, body, xml)
+        $ofx;
+    } uniq(@input_files);
+
+    ### Grouping by account...
+
+    my @ofx_groups = group_ofx_by_account(@input_ofx);
+
+    ### Merging...
+
+    my @merged_ofx = map { merge_ofx(@$_) } @ofx_groups;
+
+    ### Saving output...
+
+    # For updating, the file names may change, so unlink the old file
+    # names. For overwrite, we're just blowing them away. For abort, we
+    # won't ever get here. But just to make sure...
+    #### assert: not $ARGV{'--abort'}
+    if (@existing_ofx_files)
+    {
+        unlink(@existing_ofx_files);
+    }
+
+    foreach my $ofx (@merged_ofx)
+    {
+        save_ofx_in_directory($ofx,$ARGV{'--output-directory'});
+    }
+
+    exit 0;
+}
+
 sub prepare_directory {
     #### assert: all { defined } @_
 
@@ -574,71 +645,6 @@ sub save_ofx_in_directory {
     return 1;
 }
 
-
-### Begin script...
-
-#$ARGV{'<ofxfiles>'} or croak "No input files were specified.";
-
-### Preparing output directory...
-
-prepare_output_directory();
-
-### Reading input files...
-
-alias my @input_files = @{$ARGV{'<ofxfiles>'}};
-if (@input_files == 0 and ($ARGV{'--overwrite'} or not $ARGV{'--update'})) {
-    die "No input files were specified.\n"
-}
-
-my @existing_ofx_files = map { catfile($ARGV{'--output-directory'},$_) } list_dir($ARGV{'--output-directory'}, '--pattern=\.ofx$');
-
-if ($ARGV{'--update'}) {
-    # In order to update existing files, we just add the existing
-    # files to the input, and then overwrite.
-    push @input_files, @existing_ofx_files;
-}
-
-
-
-my @input_ofx = map {
-    my $filename = $_;
-    #### assert: $filename
-    my $ofx = read_header_and_body(IO::File->new($filename, 'r') or croak "Could not open $filename");
-    $ofx->{filename} = $filename;
-    $ofx->{xml} = parse_ofx_text($ofx->{body});
-
-    # ## check: (get_xpath($ofx->{xml}, 'fi'))[0]->sprint
-    ### assert: (get_xpath($ofx->{xml}, 'transaction_list'))[0]->sprint
-    ### assert: (get_xpath($ofx->{xml}, 'acctfrom'))[0]->sprint
-    ### assert: (get_xpath($ofx->{xml}, 'ledger_balance'))[0]->sprint
-
-    # List of hashes with keys = (header, body, xml)
-    $ofx;
-} uniq(@input_files);
-
-### Grouping by account...
-
-my @ofx_groups = group_ofx_by_account(@input_ofx);
-
-### Merging...
-
-my @merged_ofx = map { merge_ofx(@$_) } @ofx_groups;
-
-### Saving output...
-
-# For updating, the file names may change, so unlink the old file
-# names. For overwrite, we're just blowing them away. For abort, we
-# won't ever get here. But just to make sure...
-#### assert: not $ARGV{'--abort'}
-if (@existing_ofx_files) {
-    unlink(@existing_ofx_files);
-}
-
-foreach my $ofx (@merged_ofx) {
-    save_ofx_in_directory($ofx,$ARGV{'--output-directory'});
-}
-
-exit 0;
 __END__
 
 =head1 NAME
