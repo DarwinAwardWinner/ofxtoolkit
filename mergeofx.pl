@@ -262,7 +262,7 @@ BEGIN {
                 ### assert: $_->tag eq 'STMTTRN'
                 ### assert: $_->has_child('DTPOSTED')
                 ### assert: $_->has_child('FITID')
-                ### $_->sprint
+                # ## $_->sprint
 
                 try {
                     return $_->first_child('DTPOSTED')->trimmed_text;
@@ -375,7 +375,10 @@ sub reconcile_ledgers {
 
     # Need at least two balances to do any meaningful verification, so
     # if there's fewer, we have to hope that everything's OK.
-    return 1 if @ledger_balances < 2;
+    if (@ledger_balances < 2) {
+        ### Nothing to reconcile...
+        return 1;
+    }
 
     my $first_ledger = shift @ledger_balances;
     my @ledger_dates = ( $first_ledger->first_child('DTASOF')->trimmed_text );
@@ -390,6 +393,9 @@ sub reconcile_ledgers {
             if ($bal != $ledger_bals[-1]) {
                 # This would mean that two different balances were
                 # reported at the same time. Not good.
+                ### Two different ledger balances for one date...
+                ### Date: $date
+                ### Balances: ($bal, $ledger_bals[-1])
                 return;
             }
         }
@@ -548,7 +554,7 @@ sub merge_ofx {
     my $merged_tranlist = (get_xpath($merged_ofx_xml, 'transaction_list'))[0];
 
     ### assert: $merged_tranlist->can('first_child')
-    ### Class: ref $merged_tranlist
+    ### assert: $merged_tranlist->isa('XML::Twig::XPath::Elt')
     # Set date range based on first and last transaction
     my $dtstart =         $transactions[0]->first_child('DTPOSTED')->trimmed_text;
 
