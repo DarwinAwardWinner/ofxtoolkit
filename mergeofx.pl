@@ -518,8 +518,10 @@ sub merge_ofx {
         (get_xpath($_, 'ledger_balance'))[0];
     } @ofx_xml;
 
-    reconcile_ledgers(\@ledger_balances, \@transactions)
-        or die "Ledger balances for account " . gen_ofx_basename($input_ofx[-1]) . " do not agree with transactions. Are you missing a statement?\n";
+    if ($ARGV{'--reconcile'}) {
+        reconcile_ledgers(\@ledger_balances, \@transactions)
+            or die "Ledger balances for account " . gen_ofx_basename($input_ofx[-1]) . " do not agree with transactions. Are you missing a statement?\nIf your bank produces garbage ledger balances, try using --no-reconcile.";
+    }
 
     # Copy most attributes from the latest one
     my $merged_ofx_xml = clone $ofx_xml[-1];
@@ -707,8 +709,23 @@ minimizes the chance of data loss.
 As a special case, you can use --update without any input files to
 simply re-process the existing ofx files in the output directory. This
 would only be useful if you manually edited them and wanted them to be
-automatically renamed according to your edits. But you shouldn't be
-doing that. Shame on you.
+automatically renamed according to your edits. But you probably
+shouldn't be doing that. Shame on you.
+
+=item --[no-]reconcile
+
+=for Euclid:
+    false: --no-reconcile
+
+By default, this script will attempt to make sure that the
+transactions listed in all the files are consistent with the ledger
+balances recorded in those files. However, your bank may produce
+garbage ledger balances, in which case this reconcillation will not be
+possible or meaningful. In such cases, you should use the
+--no-reconcile option to disable this check.
+
+As an example, one of my banks always includes the balance as of the
+download date, even on statements from months ago.
 
 =item --version
 
