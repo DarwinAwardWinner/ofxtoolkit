@@ -14,7 +14,8 @@ shopt -s nullglob
 
 mkdir -p "$OFX_DIR"
 
-{ cd "$OFX_DIR"
+{
+  cd "$OFX_DIR"
 
   mkdir -p "$NEW_DIR" "$OLD_DIR"
 
@@ -24,7 +25,8 @@ mkdir -p "$OFX_DIR"
   #tempfiles=""
 
   # Fix OFX files, move them from old to new, and rename them
-  { cd "$NEW_DIR"
+  {
+    cd "$NEW_DIR"
     if [ "`echo *.ofx *.qfx`" != "" ]; then
       echo "Fixing..."
       for x in *.ofx *.qfx; do
@@ -38,7 +40,8 @@ mkdir -p "$OFX_DIR"
   }
 
   # Munge and merge OFX files
-  { cd "$OLD_DIR"
+  {
+    cd "$OLD_DIR"
     if [ "`echo TEMPOFX.*`" != "" ]; then
       echo "Munging..."
       "$MUNGEOFX" TEMPOFX.* || { echo "Munging failed"; exit 1; }
