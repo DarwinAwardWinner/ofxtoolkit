@@ -113,7 +113,6 @@ sub prepare_output_directory {
     alias my $outdir = $ARGV{'--output-directory'};
     prepare_directory $outdir;
 
-
     my @existing_ofx_files = list_dir($outdir, '--pattern=\.ofx$');
     if (@existing_ofx_files) {
         if ($ARGV{'--abort'}) {
@@ -122,7 +121,7 @@ sub prepare_output_directory {
         }
         elsif ($ARGV{'--update'} or $ARGV{'--overwrite'}) {
             if ($ARGV{'--update'} and $ARGV{'--overwrite'}) {
-                die "You cannot specify both --update and --overwrite options.\n"
+                die "You cannot specify both --update and --overwrite options.\n";
             }
             # Do nothing. We'll handle individual files later.
         }
@@ -482,7 +481,8 @@ sub reconcile_ledgers {
 sub merge_ofx {
     #### assert: all { $_->{xml}->isa('XML::Twig') } @_
 
-    # Shortcuts for zero and one
+    # Shortcuts for merging a set of zero or one ofx files, where no
+    # merging is required.
     if (@_ == 0) {
         return;
     }
