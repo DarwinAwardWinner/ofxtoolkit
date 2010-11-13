@@ -50,8 +50,8 @@ sub get_xpath {
             '/OFX/BANKMSGSRSV1/STMTTRNRS/STMTRS/BANKTRANLIST|/OFX/CREDITCARDMSGSRSV1/CCSTMTTRNRS/CCSTMTRS/BANKTRANLIST',
         acctfrom =>         # Account identity
             '/OFX/BANKMSGSRSV1/STMTTRNRS/STMTRS/BANKACCTFROM|/OFX/CREDITCARDMSGSRSV1/CCSTMTTRNRS/CCSTMTRS/CCACCTFROM',
-        ledger_balance =>   # Account balance
-            '/OFX/BANKMSGSRSV1/STMTTRNRS/STMTRS/LEDGERBAL|/OFX/CREDITCARDMSGSRSV1/CCSTMTTRNRS/CCSTMTRS/LEDGERBAL',
+        # ledger_balance =>   # Account balance
+        #     '/OFX/BANKMSGSRSV1/STMTTRNRS/STMTRS/LEDGERBAL|/OFX/CREDITCARDMSGSRSV1/CCSTMTTRNRS/CCSTMTRS/LEDGERBAL',
         fi =>               # Financial institution identity
             '/OFX/SIGNONMSGSRSV1/SONRS/FI',
         fi_parent =>               # Financial institution identity
@@ -80,13 +80,27 @@ sub parse_ofx_text {
     $twig->parse($input);
     #### assert: get_xpath($twig, 'transaction_list')
     #### assert: get_xpath($twig, 'acctfrom')
-    #### assert: get_xpath($twig, 'ledger_balance')
+    # ### assert: get_xpath($twig, 'ledger_balance')
     #### assert: get_xpath($twig, 'fi_parent')
 
     # This one is not mandatory
     ### check: get_xpath($twig, 'fi')
 
     return $twig;
+}
+
+sub get_latest_transaction_date {
+    my $ofx = $_[0];
+    my $twig = $ofx->{xml};
+    my $tlist = (get_xpath($twig, 'transaction_list'))[0]
+        or croak "OFX has no transaction list: " . $_->{filename};
+    my @transactions = $tlist->children('STMTTRN');
+    my $latest_date = maxstr (
+        map {
+            $_->first_child('DTPOSTED')->trimmed_text
+        } @transactions
+    ) // '';
+    return $latest_date;
 }
 
 # Generate a filename for an ofx
@@ -127,7 +141,8 @@ sub gen_ofx_basename {
     my $transaction_list = (get_xpath($xml,'transaction_list'))[0];
     my $start_date = $transaction_list->first_child('DTSTART')->trimmed_text;
     my $dtend = $transaction_list->first_child('DTEND')->trimmed_text;
-    my $dtledger = (get_xpath($xml,'ledger_balance'))[0]->first_child('DTASOF')->trimmed_text;
+    # my $dtledger = (get_xpath($xml,'ledger_balance'))[0]->first_child('DTASOF')->trimmed_text;
+    my $dtledger = get_latest_transaction_date($_[0]);
     my $end_date = maxstr ($dtend, $dtledger);
 
     # Only keep the leading digits
@@ -174,7 +189,7 @@ my @input_ofx = map {
     ### check: (get_xpath($ofx->{xml},'fi'))[0]->sprint
     #### assert: (get_xpath($ofx->{xml},'transaction_list'))[0]->sprint
     #### assert: (get_xpath($ofx->{xml},'acctfrom'))[0]->sprint
-    #### assert: (get_xpath($ofx->{xml},'ledger_balance'))[0]->sprint
+    # ### assert: (get_xpath($ofx->{xml},'ledger_balance'))[0]->sprint
 
     $ofx;
 } @ARGV;

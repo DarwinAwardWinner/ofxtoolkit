@@ -7,7 +7,7 @@ OLD_DIR=".old"
 # fixofx.py from wesabe
 FIXOFX="/home/ryan/src/wesabe/fixofx/fixofx.py"
 MUNGEOFX="/home/ryan/Projects/ofxtoolkit/mungeofx.pl"
-MERGEOFX="/home/ryan/Projects/ofxtoolkit/mergeofx.pl"
+MERGEOFX="/home/ryan/Projects/ofxtoolkit/mergeofx-simple.pl"
 RENAMEOFX="/home/ryan/Projects/ofxtoolkit/renameofx.pl"
 
 shopt -s nullglob
@@ -27,6 +27,7 @@ mkdir -p "$OFX_DIR"
   # Fix OFX files, move them from old to new, and rename them
   {
     cd "$NEW_DIR"
+
     if [ "`echo *.ofx *.qfx`" != "" ]; then
       echo "Fixing..."
       for x in *.ofx *.qfx; do
