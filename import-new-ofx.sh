@@ -32,7 +32,7 @@ mkdir -p "$OFX_DIR"
       echo "Fixing..."
       for x in *.ofx *.qfx; do
         tempfile=`mktemp -p "../${OLD_DIR}" -t TEMPOFX.XXXXXXXXX`
-        "$FIXOFX" < "$x" > "$tempfile" || { echo "fixofx failed on $x"; exit 1; }
+        cat "$x" | perl -lape 's/<DTASOF \/>//g' | "$FIXOFX" > "$tempfile" || { echo "fixofx failed on $x"; exit 1; }
       done
     else
       echo "No new files to import."
